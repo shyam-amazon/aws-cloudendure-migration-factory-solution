@@ -25,6 +25,24 @@ import json
 import getpass
 import boto3
 import botocore
+import calendar
+import time
+import base64
+
+ts = calendar.timegm(time.gmtime())
+
+region = ""
+Domain_User= ''
+Domain_Password = ''
+
+# boto session for secretsmanager
+try:
+    boto_session = boto3.session.Session()
+    from botocore.exceptions import ClientError
+except:
+    region = ""
+if region == None:
+    region = ""
 
 # Constants referenced from other modules.
 ce_endpoint = '/api/latest/{}'
@@ -39,38 +57,83 @@ with open('FactoryEndpoints.json') as json_file:
     mf_config = json.load(json_file)
 
 # common functions
-def GetWindowsPassword():
-    pass_first = getpass.getpass("Windows User Password: ")
-    pass_second = getpass.getpass("Re-enter Password: ")
-    while(pass_first != pass_second):
-        print("Password mismatch, please try again!")
+def GetWindowsPassword(domainuser):
+
+    Domain_User_temp, Domain_Password_temp, token = get_details_from_secret_manager("MGN_WINDOWS_CREDENTIAL")
+
+    if domainuser != "" and Domain_User_temp != domainuser:
+        Domain_User = domainuser
+        print("Windows credentials for Migration Factory missing. Please setup the Secrets in Secret Manager!!!")
         pass_first = getpass.getpass("Windows User Password: ")
         pass_second = getpass.getpass("Re-enter Password: ")
-    return pass_second
+        while(pass_first != pass_second):
+            print("Password mismatch, please try again!")
+            pass_first = getpass.getpass("Windows User Password: ")
+            pass_second = getpass.getpass("Re-enter Password: ")
+        Domain_Password = pass_second
+    elif domainuser != "" and Domain_User_temp == domainuser and Domain_Password_temp != "" :
+        Domain_User = domainuser
+        Domain_Password = Domain_Password_temp
+    elif not domainuser and Domain_User_temp != ""  and Domain_Password_temp != "":
+        Domain_User = Domain_User_temp
+        Domain_Password = Domain_Password_temp
+    elif not domainuser and not Domain_User_temp:
+        Domain_User = input("Enter Windows Username: ")
+        pass_first = getpass.getpass("Windows User Password: ")
+        pass_second = getpass.getpass("Re-enter Password: ")
+        while(pass_first != pass_second):
+            print("Password mismatch, please try again!")
+            pass_first = getpass.getpass("Windows User Password: ")
+            pass_second = getpass.getpass("Re-enter Password: ")
+        Domain_Password = pass_second
+    return Domain_User, Domain_Password
+
+
+
 
 def get_linux_password():
-    print("******************************************")
-    print("* Enter Linux Sudo username and password *")
-    print("******************************************")
     user_name = ''
     pass_key = ''
     has_key = ''
     key_exist = False
-    user_name = input("Linux Username: ")
-    has_key = input("If you use a private key to login, press [Y] or if use password press [N]: ")
-    if 'y' in has_key.lower():
-        pass_key = input('Private Key file name: ')
-        key_exist = True
-    else:
-        pass_key_first = getpass.getpass('Linux Password: ')
-        pass_key_second = getpass.getpass('Re-enter Password: ')
-        while(pass_key_first != pass_key_second):
-            print("Password mismatch, please try again!")
-            pass_key_first = getpass.getpass('Linux Password: ')
-            pass_key_second = getpass.getpass('Re-enter Password: ')
-        pass_key = pass_key_second
-    print("")
+    if not user_name or user_name == '':
+        print("****************************************************")
+        print("* Fetching Linux login details from secret manager *")
+        print("****************************************************")
+        user_name_temp, password, token = get_details_from_secret_manager("MGN_LINUX_CREDENTIAL")
+        user_name1, pem_key, token = get_details_from_secret_manager("PEM_KEYS")
+        if not user_name1 and not user_name_temp:
+            print("Linux credentials for Migration Factory missing. Please setup the Secrets in Secret Manager!!!")
+            user_name = input("Enter Linux Username: ")
+            has_key = input("If you use a private key to login, press [Y] or if use password press [N]: ")
+            if has_key.lower() in 'y':
+                pass_key = input('Private Key file name: ')
+                key_exist = True
+            else:
+                pass_key_first = getpass.getpass('Enter Linux Password    : ')
+                pass_key_second = getpass.getpass('Re-enter Linux Password: ')
+                while pass_key_first != pass_key_second:
+                    print("Password mismatch, please try again!")
+                    pass_key_first = getpass.getpass('Enter Linux Password    : ')
+                    pass_key_second = getpass.getpass('Re-enter Linux Password: ')
+                pass_key = pass_key_second
+        elif not password and not pem_key:
+            print("Linux credentials for Migration Factory missing. Configure either password or private key in "
+                  "Secrets Manager!!!")
+            sys.exit(1)
+        elif pem_key != "":
+            # If both PEM Key and Password is configured, PEM key would take the preference.
+            print("Login using Linux Private key")
+            user_name = user_name1
+            pass_key = pem_key
+            key_exist = True
+        else:
+            print("Login using Linux password")
+            user_name = user_name_temp
+            pass_key = password
     return user_name, pass_key, key_exist
+
+
 
 def Factorylogin():
     username = ""
@@ -106,7 +169,7 @@ def Factorylogin():
     login_data = {'username': username, 'password': password}
     try:
         r = requests.post(mf_config['LoginApiUrl'] + '/prod/login',
-                    data=json.dumps(login_data))
+                          data=json.dumps(login_data))
         if r.status_code == 200:
             print("Migration Factory : You have successfully logged in")
             print("")
@@ -122,11 +185,11 @@ def Factorylogin():
             print(r.text)
             sys.exit()
     except requests.ConnectionError as e:
-           raise SystemExit("ERROR: Connecting to the Login API failed, please check Login API in FactoryEndpoints.json file. "
-                            "If the API endpoint is correct, please close cmd and open a new cmd to run the script again")
+        raise SystemExit("ERROR: Connecting to the Login API failed, please check Login API in FactoryEndpoints.json file. "
+                         "If the API endpoint is correct, please close cmd and open a new cmd to run the script again")
 
 def ServerList(waveid, token, UserHOST, Projectname):
-# Get all Apps and servers from migration factory
+    # Get all Apps and servers from migration factory
     auth = {"Authorization": token}
     servers = json.loads(requests.get(UserHOST + serverendpoint, headers=auth).text)
     #print(servers)
@@ -189,7 +252,7 @@ def ServerList(waveid, token, UserHOST, Projectname):
 def CElogin(userapitoken):
     login_data = {'userApiToken': userapitoken}
     r = requests.post(ce_address + ce_endpoint.format('login'),
-                  data=json.dumps(login_data), headers=ce_headers)
+                      data=json.dumps(login_data), headers=ce_headers)
     if r.status_code == 200:
         print("CloudEndure : You have successfully logged in")
         print("")
@@ -208,12 +271,12 @@ def CElogin(userapitoken):
     if r.history:
         endpointnew = '/' + '/'.join(r.url.split('/')[3:-1]) + '/{}'
         r = requests.post(ce_address + endpointnew.format('login'),
-                      data=json.dumps(login_data), headers=ce_headers)
+                          data=json.dumps(login_data), headers=ce_headers)
     try:
-       ce_headers['X-XSRF-TOKEN'] = r.cookies['XSRF-TOKEN']
-       return r.cookies['session'], ce_headers['X-XSRF-TOKEN']
+        ce_headers['X-XSRF-TOKEN'] = r.cookies['XSRF-TOKEN']
+        return r.cookies['session'], ce_headers['X-XSRF-TOKEN']
     except:
-       pass
+        pass
 
     return r.cookies['session'], None
 
@@ -348,9 +411,9 @@ def get_factory_servers(waveid, token, UserHOST, osSplit = True):
                     print(msg)
                     sys.exit()
                 if len(account['servers_linux']) > 0:
-                   linux_exist = True
+                    linux_exist = True
                 if len(account['servers_windows']) > 0:
-                   windows_exist = True
+                    windows_exist = True
             else:
                 if len(account['servers']) == 0:
                     msg = "ERROR: Server list for wave " + waveid + " and account: " + account['aws_accountid'] + " region: " + account['aws_region'] + " is empty...."
@@ -407,3 +470,75 @@ def get_MGN_Source_Server(factoryserver, mgn_sourceservers):
         return lsourceserver
     else:
         return None
+
+
+def get_details_from_secret_manager(secret_name):
+    # This function uses default profile to fetch the current region of the user.
+    region = mf_config['Region']
+    username = ''
+    password = ''
+    token = ''
+
+    if region == "":
+        print("Using interactive session")
+        return username, password, token
+
+    # Create a Secrets Manager client
+    client = boto_session.client(
+        service_name='secretsmanager',
+        region_name=region
+    )
+
+    try:
+        get_secret_value_response = client.get_secret_value(
+            SecretId=secret_name
+        )
+    except ClientError as e:
+        if e.response['Error']['Code'] == 'DecryptionFailureException':
+            # Secrets Manager can't decrypt the protected secret text using the provided KMS key.
+            # Deal with the exception here, and/or rethrow at your discretion.
+            print("Secrets Manager can't decrypt the protected secret text using the provided KMS key %s" % e)
+            raise e
+        elif e.response['Error']['Code'] == 'InternalServiceErrorException':
+            # An error occurred on the server side.
+            # Deal with the exception here, and/or rethrow at your discretion.
+            print("An error occurred on the server side %s" % e)
+            raise e
+        elif e.response['Error']['Code'] == 'InvalidParameterException':
+            # You provided an invalid value for a parameter.
+            # Deal with the exception here, and/or rethrow at your discretion.
+            print("An error occurred on the server side %s" % e)
+            raise e
+        elif e.response['Error']['Code'] == 'InvalidRequestException':
+            # You provided a parameter value that is not valid for the current state of the resource.
+            # Deal with the exception here, and/or rethrow at your discretion.
+            print("You provided an invalid value for a parameter %s" % e)
+            raise e
+        elif e.response['Error']['Code'] == 'ResourceNotFoundException':
+            # We can't find the resource that you asked for.
+            # Deal with the exception here, and/or rethrow at your discretion.
+            print("We can't find the resource that you asked for in Secret Manager")
+    else:
+        # Depending on whether the secret is a string or binary, one of these fields will be populated.
+
+        if 'SecretString' in get_secret_value_response:
+            secret = json.loads(get_secret_value_response['SecretString'])
+            if (secret_name == "MGN_LINUX_CREDENTIAL") or (secret_name == "MGN_WINDOWS_CREDENTIAL"):
+                if 'username' in secret:
+                    username = secret["username"]
+                if 'password' in secret:
+                    password = secret["password"]
+            elif secret_name == "PEM_KEYS":
+                # IN this case, create a temporary pem file and return the pem file name
+                if 'secret_key' in secret:
+                    username = secret["secret_key"]
+                if 'secret_value' in secret:
+                    password = create_temp_pem_file(secret["secret_value"])
+    return username, password, token
+
+def create_temp_pem_file(secret_value):
+    temp_pem_file_name = "migrationsource_temp_"+str(ts)+".pem"
+
+    with open(temp_pem_file_name, 'w') as f:
+        f.write(base64.b64decode(secret_value).decode("utf-8"))
+    return temp_pem_file_name

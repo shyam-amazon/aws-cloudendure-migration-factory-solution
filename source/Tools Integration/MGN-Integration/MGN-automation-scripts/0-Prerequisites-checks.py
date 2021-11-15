@@ -522,15 +522,12 @@ def main(arguments):
         print("*Checking Pre-requisites for Windows servers*")
         print("*********************************************")
         print("")
-        if args.WindowsUser != "":
-           windows_password = mfcommon.GetWindowsPassword()
-        else:
-           windows_password = ''
+        windows_user, windows_password = mfcommon.GetWindowsPassword(args.WindowsUser)
         for account in get_servers:
             MGNEndpoint = "mgn.{}.amazonaws.com".format(account['aws_region'])
             result = []
             if len(account["servers_windows"]) > 0:
-                result, windows_fail = check_windows(MGNEndpoint, account["servers_windows"], args.ReplicationServerIP, args.WindowsUser, windows_password)
+                result, windows_fail = check_windows(MGNEndpoint, account["servers_windows"], args.ReplicationServerIP, windows_user, windows_password)
                 windows_results = windows_results + result
                 if windows_fail:
                    windows_status = True
