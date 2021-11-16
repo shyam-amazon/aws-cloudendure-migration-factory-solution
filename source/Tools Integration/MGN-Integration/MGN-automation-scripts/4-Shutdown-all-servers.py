@@ -123,16 +123,13 @@ def main(arguments):
         print("****************************")
         print("*Shutting down Windows servers*")
         print("****************************")
-
-        if args.WindowsUser != "":
-            windows_password = mfcommon.GetWindowsPassword()
-
+        windows_user, windows_password = mfcommon.GetWindowsPassword(args.WindowsUser)
         for account in get_servers:
             if len(account["servers_windows"]) > 0:
                 for server in account["servers_windows"]:
                     command = "Stop-Computer -ComputerName " + server['server_fqdn'] + " -Force"
                     if args.WindowsUser != "":
-                        command += " -Credential (New-Object System.Management.Automation.PSCredential(\"" + args.WindowsUser + "\", (ConvertTo-SecureString \"" + windows_password + "\" -AsPlainText -Force)))"
+                        command += " -Credential (New-Object System.Management.Automation.PSCredential(\"" + windows_user + "\", (ConvertTo-SecureString \"" + windows_password + "\" -AsPlainText -Force)))"
                     print("Shutting down server: " + server['server_fqdn'])
                     p = subprocess.Popen(["powershell.exe", command], stdout=sys.stdout)
                     p.communicate()

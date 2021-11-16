@@ -193,16 +193,13 @@ def main(arguments):
     linux_key_exist = False
     if linux_exist == True:
         linux_user_name, linux_pass_key, linux_key_exist = mfcommon.get_linux_password()
-
-    windows_password = ''
-    if windows_exist == True and args.WindowsUser != "":
-        windows_password = mfcommon.GetWindowsPassword()
-
+    if windows_exist == True:
+        windows_user, windows_password = mfcommon.GetWindowsPassword(args.WindowsUser)
     print("****************************")
     print("**** Installing Agents *****")
     print("****************************")
     print("")
-    install_agents = install_mgn_agents(args.Force, get_servers, region, args.WindowsUser, windows_password, linux_user_name, linux_pass_key, linux_key_exist)
+    install_agents = install_mgn_agents(args.Force, get_servers, region, windows_user, windows_password, linux_user_name, linux_pass_key, linux_key_exist)
 
     print("")
     print("********************************")

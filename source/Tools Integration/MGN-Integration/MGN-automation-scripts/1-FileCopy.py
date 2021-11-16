@@ -135,11 +135,8 @@ def main(arguments):
 
     if args.WindowsSource != "":
        if windows_exist:
-           if args.WindowsUser != "":
-               Windows_Password = mfcommon.GetWindowsPassword()
-               creds = " -Credential (New-Object System.Management.Automation.PSCredential(\"" + args.WindowsUser + "\", (ConvertTo-SecureString \"" + Windows_Password + "\" -AsPlainText -Force)))"
-           else:
-               creds = ""
+           windows_user, windows_password = mfcommon.GetWindowsPassword(args.WindowsUser)
+           creds = " -Credential (New-Object System.Management.Automation.PSCredential(\"" + windows_user + "\", (ConvertTo-SecureString \"" + windows_password + "\" -AsPlainText -Force)))"
            for account in get_servers:
                if len(account["servers_windows"]) > 0:
                    for server in account["servers_windows"]:
