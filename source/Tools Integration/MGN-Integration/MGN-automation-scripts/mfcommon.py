@@ -101,7 +101,7 @@ def get_linux_password():
         print("* Fetching Linux login details from secret manager *")
         print("****************************************************")
         user_name_temp, password, token = get_details_from_secret_manager("MGN_LINUX_CREDENTIAL")
-        user_name1, pem_key, token = get_details_from_secret_manager("PEM_KEYS")
+        user_name1, pem_key, token = get_details_from_secret_manager("PE")
         if not user_name1 and not user_name_temp:
             print("Linux credentials for Migration Factory missing. Please setup the Secrets in Secret Manager!!!")
             user_name = input("Enter Linux Username: ")
@@ -472,7 +472,7 @@ def get_MGN_Source_Server(factoryserver, mgn_sourceservers):
         return None
 
 
-def get_details_from_secret_manager(secret_name):
+def get_details_from_secret_manager(secret_name,linux_secret_type):
     # This function uses default profile to fetch the current region of the user.
     region = mf_config['Region']
     username = ''
@@ -523,18 +523,18 @@ def get_details_from_secret_manager(secret_name):
 
         if 'SecretString' in get_secret_value_response:
             secret = json.loads(get_secret_value_response['SecretString'])
-            if (secret_name == "MGN_LINUX_CREDENTIAL") or (secret_name == "MGN_WINDOWS_CREDENTIAL"):
+            if (linux_secret_type == "password") or (linux_secret_type == ""):
                 if 'username' in secret:
                     username = secret["username"]
                 if 'password' in secret:
                     password = secret["password"]
-            elif secret_name == "PEM_KEYS":
+            elif linux_secret_type == "pemkey":
                 # IN this case, create a temporary pem file and return the pem file name
                 if 'secret_key' in secret:
                     username = secret["secret_key"]
                 if 'secret_value' in secret:
                     password = create_temp_pem_file(secret["secret_value"])
-    return username, password, token
+    return username, password
 
 def create_temp_pem_file(secret_value):
     temp_pem_file_name = "migrationsource_temp_"+str(ts)+".pem"

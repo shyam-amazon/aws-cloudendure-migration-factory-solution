@@ -107,9 +107,9 @@ def get_factory_servers(waveid, token, UserHOST):
                 print(msg)
                 sys.exit()
             if len(account['servers_linux']) > 0:
-               linux_exist = True
+                linux_exist = True
             if len(account['servers_windows']) > 0:
-               windows_exist = True
+                windows_exist = True
         return aws_accounts, linux_exist, windows_exist
     except botocore.exceptions.ClientError as error:
         if ":" in str(error):
@@ -203,13 +203,13 @@ def check_sudo_permissions(ssh, s_result):
         for err in stderr.readlines():
             ssh_err = ssh_err + err
     if 'password is required' in ssh_err:
-            s_result["error"] = ssh_err
-            s_result["SUDO"] = "Fail"
-            if "final_result" in s_result:
-                s_result["final_result"] = s_result["final_result"] + "SUDO,"
-            else:
-                s_result["final_result"] = "SUDO,"
-            print(" SUDO permission         : Fail")
+        s_result["error"] = ssh_err
+        s_result["SUDO"] = "Fail"
+        if "final_result" in s_result:
+            s_result["final_result"] = s_result["final_result"] + "SUDO,"
+        else:
+            s_result["final_result"] = "SUDO,"
+        print(" SUDO permission         : Fail")
     else:
         s_result["SUDO"] = "Pass"
         print(" SUDO permission         : Pass")
@@ -304,16 +304,16 @@ def check_freespace(ssh, dir, min,  s_result):
         for err in stderr.readlines():
             ssh_err = ssh_err + err
     if len(ssh_err) > 0 :
-            s_result["error"] = ssh_err
-            s_result["FreeSpace"] = "Fail"
-            if "final_result" in s_result:
-                s_result["final_result"] = s_result["final_result"] + "FreeSpace" + str(min) + ","
-            else:
-                s_result["final_result"] = "FreeSpace" + str(min) + ","
-            if min == 2.0:
-                print(" " + str(min) + " GB " + dir + " FreeSpace      : Fail")
-            else:
-                print(" " + str(min) + " GB " + dir + " FreeSpace   : Fail")
+        s_result["error"] = ssh_err
+        s_result["FreeSpace"] = "Fail"
+        if "final_result" in s_result:
+            s_result["final_result"] = s_result["final_result"] + "FreeSpace" + str(min) + ","
+        else:
+            s_result["final_result"] = "FreeSpace" + str(min) + ","
+        if min == 2.0:
+            print(" " + str(min) + " GB " + dir + " FreeSpace      : Fail")
+        else:
+            print(" " + str(min) + " GB " + dir + " FreeSpace   : Fail")
     else:
         s_result["FreeSpace"] = "Pass"
         if min == 2.0:
@@ -338,13 +338,13 @@ def check_dhclient(ssh, s_result):
         for err in stderr.readlines():
             ssh_err = ssh_err + err
     if len(ssh_err) > 0 and 'not found' in ssh_err:
-            s_result["error"] = ssh_err
-            s_result["DHCLIENT"] = "Fail"
-            if "final_result" in s_result:
-                s_result["final_result"] = s_result["final_result"] + "DHCLIENT,"
-            else:
-                s_result["final_result"] = "DHCLIENT,"
-            print(" DHCLIENT Package        : Fail")
+        s_result["error"] = ssh_err
+        s_result["DHCLIENT"] = "Fail"
+        if "final_result" in s_result:
+            s_result["final_result"] = s_result["final_result"] + "DHCLIENT,"
+        else:
+            s_result["final_result"] = "DHCLIENT,"
+        print(" DHCLIENT Package        : Fail")
     else:
         s_result["DHCLIENT"] = "Pass"
         print(" DHCLIENT Package        : Pass")
@@ -366,7 +366,7 @@ def check_linux(MGNEndpoint, Servers_Linux, MGNServerIP, user_name, pass_key, ke
 
         # This checks network connectivity, if we can SSH to the source machine
         ssh = check_ssh_connectivity(s["server_fqdn"], user_name, pass_key,
-                               key_exist, s_result)
+                                     key_exist, s_result)
         if "SSH22" not in s_result["final_result"]:
             # Check if the given user has sudo permissions
             check_sudo_permissions(ssh, s_result)
@@ -439,12 +439,12 @@ def print_results(label, results, UserHOST, token, status):
                     print("     " + result['server_name'])
                     serverattr = {"migration_status": "Pre-requisites check : Passed"}
                     update = requests.put(UserHOST + serverendpoint + '/' +
-                                        result['server_id'], headers={
+                                          result['server_id'], headers={
                         "Authorization": token}, data=json.dumps(serverattr))
             else:
                 isEmpty = isEmpty + 1
     if len(results) == isEmpty:
-       print("     No Server Passed")
+        print("     No Server Passed")
 
     if status:
         print("")
@@ -485,10 +485,14 @@ def main(arguments):
         formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--Waveid', required=True)
     parser.add_argument('--ReplicationServerIP', required=True)
-    parser.add_argument('--WindowsUser', default="")
+    parser.add_argument('--LinuxCredentialType', default="")
+    parser.add_argument('--LinuxSecretName', default="")
+    parser.add_argument('--WindowsSecretName', default="")
     args = parser.parse_args(arguments)
 
     UserHOST = ""
+    lin_cred_typ = args.LinuxCredentialType
+    lin_secre_name = args.LinuxSecretName
 
     if 'UserApiUrl' in endpoints:
         UserHOST = endpoints['UserApiUrl']
@@ -510,7 +514,23 @@ def main(arguments):
     pass_key = ''
     key_exist = False
     if linux_exist == True:
-        user_name, pass_key, key_exist = mfcommon.get_linux_password()
+        if lin_cred_typ.lower() == 'pemkey':
+            if lin_secre_name:
+                user_name, pass_key = mfcommon.get_details_from_secret_manager(lin_secre_name, lin_cred_typ.lower())
+                key_exist = True
+            else:
+                print("ERROR: Linux PEM KEY secret name should be provided!!")
+                sys.exit()
+        elif lin_cred_typ.lower() == 'password':
+            if lin_secre_name:
+                user_name, pass_key = mfcommon.get_details_from_secret_manager(lin_secre_name, lin_cred_typ.lower())
+                key_exist = False
+            else:
+                print("ERROR: Linux password secret name should be provided!!")
+                sys.exit()
+        else:
+            print("ERROR: LinuxCredentialType should be either `pemkey` or `password` ")
+            sys.exit()
 
     windows_results = []
     linux_results = []
@@ -522,7 +542,11 @@ def main(arguments):
         print("*Checking Pre-requisites for Windows servers*")
         print("*********************************************")
         print("")
-        windows_user, windows_password = mfcommon.GetWindowsPassword(args.WindowsUser)
+        if args.WindowsSecretName != "":
+            windows_user, windows_password = mfcommon.get_details_from_secret_manager(args.WindowsSecretName, lin_cred_typ.lower())
+        else:
+            print("ERROR: WindowsSecretName is missing !!")
+            sys.exit()
         for account in get_servers:
             MGNEndpoint = "mgn.{}.amazonaws.com".format(account['aws_region'])
             result = []
@@ -530,7 +554,7 @@ def main(arguments):
                 result, windows_fail = check_windows(MGNEndpoint, account["servers_windows"], args.ReplicationServerIP, windows_user, windows_password)
                 windows_results = windows_results + result
                 if windows_fail:
-                   windows_status = True
+                    windows_status = True
 
     if linux_exist:
         print("")
@@ -545,7 +569,7 @@ def main(arguments):
                 result, linux_fail = check_linux(MGNEndpoint, account["servers_linux"], args.ReplicationServerIP, user_name, pass_key, key_exist)
                 linux_results = linux_results + result
                 if linux_fail:
-                   linux_status = True
+                    linux_status = True
 
     print("")
     print("********************************************")
@@ -553,9 +577,9 @@ def main(arguments):
     print("********************************************")
     print("")
     if windows_exist:
-       print_results("Windows", windows_results, UserHOST, token, windows_status)
+        print_results("Windows", windows_results, UserHOST, token, windows_status)
     if linux_exist:
-       print_results("Linux", linux_results, UserHOST, token, linux_status)
+        print_results("Linux", linux_results, UserHOST, token, linux_status)
 
 if __name__ == '__main__':
     sys.exit(main(sys.argv[1:]))
